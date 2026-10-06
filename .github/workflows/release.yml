@@ -1,0 +1,47 @@
+# Push a tag vX.Y.Z on main to release: imports the role into Ansible Galaxy
+# (ram_electronic.jetbrains_toolbox) and creates a GitHub release with generated notes.
+# Needs the repository secret GALAXY_API_KEY: the API token from https://galaxy.ansible.com/ui/token/
+# of an owner of the Galaxy namespace ram_electronic (requested via the Ansible Forum).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write  # GitHub release
+
+jobs:
+  release:
+    name: Galaxy import and GitHub release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Not "ansible-galaxy role import": it derives the clone URL from the namespace, and the
+      # GitHub org (ram-electronic) differs from the Galaxy namespace (ram_electronic, no
+      # hyphens allowed). The API takes the real clone URL:
+      # https://forum.ansible.com/t/galaxy-role-import-namespace-github-user-org-mismatch/45995
+      - name: Import into Ansible Galaxy
+        env:
+          GALAXY_API_KEY: ${{ secrets.GALAXY_API_KEY }}
+          GALAXY_NAMESPACE: ram_electronic
+        run: |
+          if [ -z "$GALAXY_API_KEY" ]; then
+            echo "::error::Repository secret GALAXY_API_KEY is not set"
+            exit 1
+          fi
+          body=$(jq -n --arg user "$GALAXY_NAMESPACE" --arg repo "${GITHUB_REPOSITORY#*/}" \
+            --arg url "https://github.com/$GITHUB_REPOSITORY" \
+            '{github_user: $user, github_repo: $repo, alternate_clone_url: $url}')
+          curl --fail-with-body -sS -X POST https://galaxy.ansible.com/api/v1/imports/ \
+            -H "Authorization: Token $GALAXY_API_KEY" -H 'Content-Type: application/json' \
+            --data "$body"
+          echo
+          echo "Import started: https://galaxy.ansible.com/ui/standalone/roles/$GALAXY_NAMESPACE/jetbrains_toolbox/"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
