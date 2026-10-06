@@ -1,0 +1,45 @@
+# Push a tag vX.Y.Z on main to release: imports the role into Ansible Galaxy
+# (ram_electronic.jetbrains_toolbox) and creates a GitHub release with generated notes.
+# Needs the repository secret GALAXY_API_KEY: the API token from galaxy.ansible.com (log in with
+# GitHub; the account must be allowed to import into the ram_electronic namespace).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write  # GitHub release
+
+jobs:
+  release:
+    name: Galaxy import and GitHub release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install ansible-core
+        run: pip install ansible-core
+
+      # Galaxy imports the default branch, so the tag must be on main
+      - name: Import into Ansible Galaxy
+        env:
+          GALAXY_API_KEY: ${{ secrets.GALAXY_API_KEY }}
+        run: |
+          if [ -z "$GALAXY_API_KEY" ]; then
+            echo "::error::Repository secret GALAXY_API_KEY is not set"
+            exit 1
+          fi
+          ansible-galaxy role import --api-key "$GALAXY_API_KEY" \
+            "${GITHUB_REPOSITORY_OWNER}" "${GITHUB_REPOSITORY#*/}"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
