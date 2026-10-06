@@ -1,7 +1,7 @@
 # Push a tag vX.Y.Z on main to release: imports the role into Ansible Galaxy
 # (ram_electronic.jetbrains_toolbox) and creates a GitHub release with generated notes.
-# Needs the repository secret GALAXY_API_KEY: the API token from galaxy.ansible.com (log in with
-# GitHub; the account must be allowed to import into the ram_electronic namespace).
+# Needs the repository secret GALAXY_API_KEY: the API token from https://galaxy.ansible.com/ui/token/
+# of an owner of the Galaxy namespace ram_electronic (requested via the Ansible Forum).
 name: Release
 
 on:
@@ -19,25 +19,27 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: Install ansible-core
-        run: pip install ansible-core
-
-      # Galaxy imports the default branch, so the tag must be on main
+      # Not "ansible-galaxy role import": it derives the clone URL from the namespace, and the
+      # GitHub org (ram-electronic) differs from the Galaxy namespace (ram_electronic, no
+      # hyphens allowed). The API takes the real clone URL:
+      # https://forum.ansible.com/t/galaxy-role-import-namespace-github-user-org-mismatch/45995
       - name: Import into Ansible Galaxy
         env:
           GALAXY_API_KEY: ${{ secrets.GALAXY_API_KEY }}
+          GALAXY_NAMESPACE: ram_electronic
         run: |
           if [ -z "$GALAXY_API_KEY" ]; then
             echo "::error::Repository secret GALAXY_API_KEY is not set"
             exit 1
           fi
-          ansible-galaxy role import --api-key "$GALAXY_API_KEY" \
-            "${GITHUB_REPOSITORY_OWNER}" "${GITHUB_REPOSITORY#*/}"
+          body=$(jq -n --arg user "$GALAXY_NAMESPACE" --arg repo "${GITHUB_REPOSITORY#*/}" \
+            --arg url "https://github.com/$GITHUB_REPOSITORY" \
+            '{github_user: $user, github_repo: $repo, alternate_clone_url: $url}')
+          curl --fail-with-body -sS -X POST https://galaxy.ansible.com/api/v1/imports/ \
+            -H "Authorization: Token $GALAXY_API_KEY" -H 'Content-Type: application/json' \
+            --data "$body"
+          echo
+          echo "Import started: https://galaxy.ansible.com/ui/standalone/roles/$GALAXY_NAMESPACE/jetbrains_toolbox/"
 
       - name: Create GitHub release
         env:
