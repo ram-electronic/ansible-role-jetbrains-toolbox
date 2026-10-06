@@ -1,0 +1,7 @@
+version: 2
+updates:
+  # Keeps the workflow files (ci.yml, release.yml) current (actions/checkout, actions/setup-python)
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

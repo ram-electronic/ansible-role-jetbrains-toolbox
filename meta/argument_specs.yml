@@ -1,0 +1,27 @@
+argument_specs:
+  main:
+    short_description: Install the JetBrains Toolbox App for one user
+    description:
+      - Downloads the latest Toolbox App (sha256-verified) and unpacks it, only when it is
+        missing. The Toolbox App updates itself; IDEs are installed from within it.
+      - Also installs the libraries it needs on Arch Linux and Debian/Ubuntu.
+    options:
+      jetbrains_toolbox_install_dependencies:
+        type: bool
+        default: true
+        description: Install the needed libraries (Arch Linux and Debian family only).
+      jetbrains_toolbox_user:
+        type: str
+        required: true
+        description: User who gets the Toolbox App.
+      jetbrains_toolbox_dir:
+        type: str
+        default: ""
+        description: Install directory. Empty means ~/.local/opt/jetbrains-toolbox of the user.
+      jetbrains_toolbox_menu_entry:
+        type: bool
+        default: true
+        description: Add a menu entry for the first start.
+      jetbrains_toolbox_releases_url:
+        type: str
+        description: JetBrains release API URL for the Toolbox App.

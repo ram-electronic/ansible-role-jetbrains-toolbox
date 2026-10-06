@@ -1,0 +1,15 @@
+# jetbrains_toolbox_user (required): user who gets the Toolbox App
+
+# Where the Toolbox App is unpacked. It runs from here and updates itself here.
+# Empty: ~/.local/opt/jetbrains-toolbox of the user.
+jetbrains_toolbox_dir: ""
+
+# Install the libraries the Toolbox App needs (Arch Linux, Debian/Ubuntu). Set to false
+# on other distributions and install them yourself (see vars/main.yml).
+jetbrains_toolbox_install_dependencies: true
+
+# Add a menu entry for the first start (the Toolbox App then writes its own)
+jetbrains_toolbox_menu_entry: true
+
+# Release lookup (JetBrains product code TBA = Toolbox App)
+jetbrains_toolbox_releases_url: https://data.services.jetbrains.com/products/releases?code=TBA&latest=true&type=release

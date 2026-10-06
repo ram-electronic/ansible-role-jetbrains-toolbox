@@ -1,0 +1,5 @@
+# Libraries the Toolbox App needs (JetBrains system requirements), per ansible_facts.os_family.
+# Debian also covers Ubuntu and other Debian derivatives.
+_jetbrains_toolbox_dependencies:
+  Archlinux: [libxi, libxrender, libxtst, fontconfig, gtk3, mesa-utils]
+  Debian: [libxi6, libxrender1, libxtst6, libfontconfig1, libgtk-3-bin, mesa-utils, dbus-user-session]

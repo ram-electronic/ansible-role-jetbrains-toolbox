@@ -1,0 +1,15 @@
+# Test playbook for roles/jetbrains_toolbox, run by tests/run.sh in a fresh container
+- name: Test jetbrains_toolbox
+  hosts: localhost
+  connection: local
+
+  tasks:
+    - name: Create test user
+      ansible.builtin.user:
+        name: tester
+
+    - name: Run jetbrains_toolbox
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir | dirname }}"
+      vars:
+        jetbrains_toolbox_user: tester

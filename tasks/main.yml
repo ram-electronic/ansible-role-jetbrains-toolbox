@@ -1,0 +1,145 @@
+# Only uses ansible.builtin modules (on Arch Linux, ansible.builtin.package uses
+# community.general.pacman, included in the "ansible" package).
+# Runs as root and sets owners, so no become_user is needed.
+
+- name: Gather OS facts
+  ansible.builtin.setup:
+    gather_subset: [min]
+  when: ansible_facts.os_family is not defined
+
+- name: Install Toolbox App dependencies
+  when: jetbrains_toolbox_install_dependencies
+  block:
+    - name: Check that dependencies are known for {{ ansible_facts.os_family }}
+      ansible.builtin.assert:
+        that: ansible_facts.os_family in _jetbrains_toolbox_dependencies
+        fail_msg: >-
+          No dependency list for {{ ansible_facts.os_family }} (supported:
+          {{ _jetbrains_toolbox_dependencies.keys() | join(', ') }}). Install the libraries
+          yourself and set jetbrains_toolbox_install_dependencies: false.
+        quiet: true
+
+    - name: Update apt package lists
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_facts.os_family == 'Debian'
+
+    - name: Install Toolbox App dependencies
+      ansible.builtin.package:
+        name: "{{ _jetbrains_toolbox_dependencies[ansible_facts.os_family] }}"
+        state: present
+
+- name: Look up home directory of {{ jetbrains_toolbox_user }}
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ jetbrains_toolbox_user }}"
+
+# Not a default in defaults/main.yml: argument validation templates defaults before
+# the home directory is known.
+- name: Set home and install directory
+  ansible.builtin.set_fact:
+    _jetbrains_toolbox_home: "{{ ansible_facts.getent_passwd[jetbrains_toolbox_user][4] }}"
+    _jetbrains_toolbox_dir: >-
+      {{ jetbrains_toolbox_dir
+         or ansible_facts.getent_passwd[jetbrains_toolbox_user][4] ~ '/.local/opt/jetbrains-toolbox' }}
+
+# Directories inside the home are created level by level (e.g. .local, .local/opt, ...)
+# so that they belong to the user, not root. Outside the home only the directory itself.
+# Existing parents keep their mode.
+- name: Create directories for {{ jetbrains_toolbox_user }}
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ jetbrains_toolbox_user }}"
+    group: "{{ jetbrains_toolbox_user }}"
+    mode: "{{ '0755' if item == _jetbrains_toolbox_dir else omit }}"
+  loop: >-
+    {%- set targets = [_jetbrains_toolbox_dir] -%}
+    {%- if jetbrains_toolbox_menu_entry -%}
+      {%- set _ = targets.append(_jetbrains_toolbox_home ~ '/.local/share/applications') -%}
+    {%- endif -%}
+    {%- set dirs = [] -%}
+    {%- for target in targets -%}
+      {%- set rel = target | relpath(_jetbrains_toolbox_home) -%}
+      {%- if rel.startswith('..') -%}
+        {%- set _ = dirs.append(target) -%}
+      {%- else -%}
+        {%- set parts = rel.split('/') -%}
+        {%- for i in range(1, parts | length + 1) -%}
+          {%- set _ = dirs.append(_jetbrains_toolbox_home ~ '/' ~ parts[:i] | join('/')) -%}
+        {%- endfor -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {{ dirs | unique }}
+
+# The Toolbox App runs from where it was unpacked and updates itself there, so it is
+# only downloaded when missing (never replaced by Ansible).
+- name: Check Toolbox App
+  ansible.builtin.stat:
+    path: "{{ _jetbrains_toolbox_dir }}/bin/jetbrains-toolbox"
+  register: _jetbrains_toolbox_bin
+
+- name: Install Toolbox App
+  when: not _jetbrains_toolbox_bin.stat.exists
+  block:
+    - name: Look up latest Toolbox App release
+      ansible.builtin.uri:
+        url: "{{ jetbrains_toolbox_releases_url }}"
+        return_content: true
+      register: _jetbrains_toolbox_release
+
+    - name: Select download for this architecture
+      ansible.builtin.set_fact:
+        _jetbrains_toolbox_download: >-
+          {{ _jetbrains_toolbox_release.json.TBA[0].downloads[
+             'linuxARM64' if ansible_facts.architecture | default('x86_64') == 'aarch64' else 'linux'] }}
+
+    - name: Create temporary file for the download
+      ansible.builtin.tempfile:
+        suffix: .tar.gz
+      register: _jetbrains_toolbox_tmp
+
+    - name: Download Toolbox App
+      ansible.builtin.get_url:
+        url: "{{ _jetbrains_toolbox_download.link }}"
+        checksum: "sha256:{{ _jetbrains_toolbox_download.checksumLink }}"
+        dest: "{{ _jetbrains_toolbox_tmp.path }}"
+        mode: "0644"
+        force: true  # the empty temporary file already exists
+
+    - name: Unpack Toolbox App
+      ansible.builtin.unarchive:
+        src: "{{ _jetbrains_toolbox_tmp.path }}"
+        dest: "{{ _jetbrains_toolbox_dir }}"
+        remote_src: true
+        extra_opts: [--strip-components=1]
+        owner: "{{ jetbrains_toolbox_user }}"
+        group: "{{ jetbrains_toolbox_user }}"
+
+  always:
+    - name: Remove Toolbox App download
+      ansible.builtin.file:
+        path: "{{ _jetbrains_toolbox_tmp.path }}"
+        state: absent
+      when: _jetbrains_toolbox_tmp.path is defined
+
+# Only for the first start: the Toolbox App then writes its own menu entry (same file)
+# and an autostart entry
+- name: Add Toolbox App to the application menu
+  ansible.builtin.copy:
+    dest: "{{ _jetbrains_toolbox_home }}/.local/share/applications/jetbrains-toolbox.desktop"
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Name=JetBrains Toolbox
+      Exec={{ _jetbrains_toolbox_dir }}/bin/jetbrains-toolbox %u
+      Icon={{ _jetbrains_toolbox_dir }}/bin/toolbox.svg
+      Categories=Development
+      StartupWMClass=jetbrains-toolbox
+      Terminal=false
+    owner: "{{ jetbrains_toolbox_user }}"
+    group: "{{ jetbrains_toolbox_user }}"
+    mode: "0644"
+    force: false
+  when: jetbrains_toolbox_menu_entry
