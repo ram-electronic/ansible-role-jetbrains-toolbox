@@ -26,7 +26,7 @@ jobs:
       - name: Import into Ansible Galaxy
         env:
           GALAXY_API_KEY: ${{ secrets.GALAXY_API_KEY }}
-          GALAXY_NAMESPACE: ram_electronic
+          GALAXY_NAMESPACE: ram
         run: |
           if [ -z "$GALAXY_API_KEY" ]; then
             echo "::error::Repository secret GALAXY_API_KEY is not set"
