@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  # The role installs the latest Toolbox App, so JetBrains can break it without a commit here
+  schedule:
+    - cron: "0 5 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install linters
+        run: pip install ansible-lint yamllint
+
+      - name: yamllint
+        run: yamllint .
+
+      - name: ansible-lint
+        run: ansible-lint
+
+  test:
+    name: Test on ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [debian:13, ubuntu:24.04, archlinux:latest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Fresh container: installs Ansible, runs the role twice, checks the result
+      - name: Run role tests in ${{ matrix.image }}
+        run: tests/docker.sh "${{ matrix.image }}"
