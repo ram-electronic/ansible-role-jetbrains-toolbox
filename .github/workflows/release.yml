@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Not "ansible-galaxy role import": it derives the clone URL from the namespace, and the
       # GitHub org (ram-electronic) differs from the Galaxy namespace (ram_electronic, no
